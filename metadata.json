@@ -1,0 +1,7 @@
+{
+  "name": "FreshFocus",
+  "description": "AI-powered smart fridge and meal planner that reduces waste using photo recognition and FEFO principles.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
