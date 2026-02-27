@@ -49,8 +49,8 @@ AI is not a bolt-on feature here — it is the core mechanism that makes the pro
 
 | SDG | How FreshFocus Contributes |
 |---|---|
-| **SDG 2 — Zero Hunger** | Smarter food use at home stretches budgets further, improving food security for low-income households |
-| **SDG 3 — Good Health & Well-being** | Nutritional balance tracking and personalised recipes encourage healthier eating habits |
+| **SDG 2 — Zero Hunger** | Indirectly contributes by optimising home food use, reducing waste, and helping households make better use of available ingredients |
+| **SDG 3 — Good Health & Well-being** | Encourages healthier eating habits by providing balanced recipes generated from available ingredients |
 | **SDG 12 — Responsible Consumption & Production** | Directly tackles household food waste — one of the largest contributors to Target 12.3 (halving per-capita food waste by 2030) |
 | **SDG 13 — Climate Action** | Reducing food waste cuts methane emissions from landfills and lowers the carbon footprint of food production |
 
@@ -61,9 +61,9 @@ AI is not a bolt-on feature here — it is the core mechanism that makes the pro
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   FreshFocus SPA                    │
-│               (React 19 + Vite + TypeScript)        │
+│            (React 19 + Vite + TypeScript)           │
 │                                                     │
-│  Inventory │ Recipes │ Dashboard │ Shopping │ Settings│
+│Inventory │ Recipes │ Dashboard │ Shopping │ Settings│
 │                                                     │
 │  ┌──────────────────────────────────────────────┐   │
 │  │             Service Layer                    │   │
@@ -73,8 +73,8 @@ AI is not a bolt-on feature here — it is the core mechanism that makes the pro
           │                          │
           ▼                          ▼
   ┌───────────────┐         ┌─────────────────┐
-  │  Google Gemini │         │  Firebase Cloud  │
-  │  Vision + Text │         │  Firestore Auth  │
+  │ Google Gemini │         │ Firebase Cloud  │
+  │ Vision + Text │         │ Firestore Auth  │
   └───────────────┘         └─────────────────┘
 ```
 
@@ -105,7 +105,7 @@ AI is not a bolt-on feature here — it is the core mechanism that makes the pro
 | 📷 **AI Fridge Scanning** | Rear-camera capture → Gemini Vision → structured ingredient list with days-to-expiry |
 | 🧂 **Ingredient Inventory** | Expiry risk badges (Fresh / Use Soon / Expired), quantity tracking, usage logging |
 | 🍳 **AI Recipe Generation** | Gemini generates 3 personalised recipes, prioritising near-expiry ingredients |
-| 📊 **Waste Dashboard** | Pie chart (used vs. wasted) + nutritional balance bar chart, computed client-side |
+| 📊 **Waste Dashboard** | Pie chart (used vs. wasted) + nutritional balance bar chart of fridge contents, computed client-side |
 | 🛒 **Shopping List** | Persistent, real-time synced grocery list with purchase toggle |
 | ⚙️ **User Preferences** | Dietary restrictions, fitness goals, and taste preferences for AI personalisation |
 | 🔐 **Authentication** | Firebase Auth with profile name editing |
@@ -154,9 +154,9 @@ Expiry is computed dynamically at render time from an ISO date string — not st
 
 FreshFocus innovates at the **intersection of computer vision, generative AI, and behaviour change**:
 
-- **Zero-friction onboarding**: The AI fridge scanner means users don't have to type a single ingredient to get started — a major barrier in traditional inventory apps.
-- **Closed-loop waste reduction**: AI is used at both ends — detecting what's there *and* suggesting what to do with it before it expires.
-- **Structured AI outputs**: Using Gemini's native JSON schema enforcement (not regex parsing) produces reliable, type-safe data that integrates seamlessly with the TypeScript data layer.
+- **Zero-friction onboarding**: The AI fridge scanner eliminates the need to manually type ingredients, removing a major barrier in traditional inventory apps.
+- **Closed-loop waste reduction**: AI operates at both ends — detecting available ingredients and suggesting recipes or actions before they expire.
+- **Structured AI outputs**: Using Gemini's native JSON schema enforcement (not regex parsing) ensures reliable, type-safe data that integrates seamlessly with the TypeScript data layer.
 - **Real-time multi-device sync**: Firestore listeners make FreshFocus feel like a native app across phones, tablets, and desktops without any backend code.
 
 ---
@@ -223,10 +223,23 @@ npm install
 
 ### Environment Variables
 
+Create a `.env` file in the project root with the following variables:
+
 ```env
-# .env
+# Google Gemini
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# Firebase
+VITE_FIREBASE_API_KEY=your_firebase_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+VITE_FIREBASE_APP_ID=your_app_id
 ```
+
+> **Gemini API key** — get one at [ai.google.dev](https://ai.google.dev/)  
+> **Firebase credentials** — found in your Firebase project settings under *General → Your apps → SDK setup*
 
 ### Run Locally
 
@@ -234,17 +247,40 @@ GEMINI_API_KEY=your_gemini_api_key_here
 npm run dev   # http://localhost:3000
 ```
 
+### Firestore Security Rules
+
+In the Firebase console, go to **Firestore → Rules** and paste the following:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Each authenticated user can only read/write their own data
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Deny all other access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+```
+
+This ensures every user's ingredients, shopping list, and preferences are fully isolated — no user can access another user's data.
+
 ---
 
 ## 🗺️ Future Roadmap
 
 | Timeline | Feature |
 |---|---|
-| Short-term | Barcode scanner for product-level expiry data |
+| Short-term | Food icons for each ingredient |
 | Short-term | Push notifications for near-expiry alerts |
-| Medium-term | Native mobile app (Flutter) with background notifications |
 | Medium-term | Weekly meal planner integrated with recipe engine |
-| Long-term | Supermarket API integration for one-tap grocery ordering |
+| Long-term | Multi-fridge support |
 | Long-term | Carbon footprint tracking — calculate CO₂ saved per ingredient |
 
 ---
