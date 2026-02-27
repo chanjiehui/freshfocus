@@ -147,7 +147,7 @@ const IngredientItem = ({ ingredient, onDelete, onUse, onSelect, selected, class
         </div>
         <button
           onClick={() => onDelete(ingredient.id)}
-          className="p-2 text-stone-300 hover:text-rose-500 transition-colors sm:opacity-0 group-hover:opacity-100"
+          className="p-2 text-stone-300 hover:text-rose-500 transition-colors"
         >
           <Trash2 size={22} />
         </button>
@@ -1221,7 +1221,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* Navigation (保持不变) */}
+      {/* Navigation*/}
       <nav className="fixed bottom-6 left-4 right-4 bg-white/80 backdrop-blur-xl border border-stone-200 rounded-[32px] p-2 flex justify-between items-center shadow-2xl shadow-stone-200/50 z-40">
         {[
           { id: 'inventory', icon: Refrigerator, label: 'Fridge' },
