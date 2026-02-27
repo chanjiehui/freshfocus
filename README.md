@@ -299,9 +299,3 @@ This ensures every user's ingredients, shopping list, and preferences are fully 
 MIT License — see [LICENSE](LICENSE) for details.
 
 ---
-
-<div align="center">
-
-Built to fight food waste, powered by Google AI.
-
-</div>
