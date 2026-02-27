@@ -256,6 +256,35 @@ VITE_FIREBASE_APP_ID=your_app_id
 npm run dev   # http://localhost:3000
 ```
 
+## Testing on Your Phone (ngrok)
+
+The AI fridge scanner requires a **real camera**, so you'll want to test on an actual mobile device. Use [ngrok](https://ngrok.com/) to expose your local dev server over HTTPS (required for camera access in mobile browsers).
+
+1. Install ngrok:
+   ```bash
+   brew install ngrok   # macOS
+   # or download from https://ngrok.com/download
+   ```
+
+2. Start the dev server:
+   ```bash
+   npm run dev
+   ```
+
+3. In a separate terminal, run ngrok:
+   ```bash
+   ngrok http 3000
+   ```
+
+4. ngrok will output a public HTTPS URL like:
+   ```
+   Forwarding   https://abc123.ngrok-free.app -> http://localhost:3000
+   ```
+
+5. Open that URL on your phone — the camera and all Firebase features will work over HTTPS.
+
+> **Note:** The free ngrok tier is sufficient. You do not need an account for basic tunnelling.
+
 ### Firestore Security Rules
 
 In the Firebase console, go to **Firestore → Rules** and paste the following:
