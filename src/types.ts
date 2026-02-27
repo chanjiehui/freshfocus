@@ -9,8 +9,13 @@ export interface Ingredient {
   estimatedDaysLeft: number;
   quantity: number;
   originalQuantity: number;
+  usageHistory?: {
+    usedAmount: number;
+    usedDate: string;
+  }[];
   unit: string; // e.g., "Half full", "pieces"
-  used?: number; // Optional: amount used in recipes
+  used?: number;
+  nutritionalInfo?: 'Veggies' | 'Protein' | 'Carbs';
 }
 
 export interface Recipe {
@@ -38,4 +43,8 @@ export interface WasteStats {
   used: number;
   wasted: number;
   savedValue: number;
+}
+
+export interface ShoppingListItem extends Ingredient {
+  purchased: boolean;
 }

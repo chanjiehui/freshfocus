@@ -12,10 +12,12 @@ import {
   ChevronRight,
   Loader2,
   X,
-  Sparkles
+  Sparkles,
+  Pencil,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Ingredient, Recipe, UserPreferences, ExpiryRisk } from './types';
+import { Ingredient, Recipe, UserPreferences, ExpiryRisk, ShoppingListItem } from './types';
 import { analyzeFridgeImage, generateRecipes } from './services/gemini';
 import {
   BarChart,
@@ -30,8 +32,26 @@ import {
   Cell
 } from 'recharts';
 import ReactMarkdown from 'react-markdown';
+import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
+import { auth } from './services/firebase';
+import AuthForm from './AuthForm';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import type { User } from "firebase/auth";
+import {
+  getFirestore,
+  collection,
+  doc,
+  setDoc,
+  getDocs,
+  deleteDoc,
+  getDoc,
+  writeBatch,
+  onSnapshot
+} from "firebase/firestore";
+import { u } from 'motion/react-client';
 
 // --- Components ---
+const db = getFirestore();
 
 const StatusBadge = ({ risk }: { risk: ExpiryRisk }) => {
   const colors = {
@@ -66,7 +86,7 @@ const IngredientItem = ({ ingredient, onDelete, onUse, onSelect, selected, class
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="flex items-center justify-between p-6 bg-white rounded-2xl border border-stone-200 card-hover group group w-full min-h-[100px] ${className}`"
+      className={`flex items-center justify-between p-6 bg-white rounded-2xl border border-stone-200 card-hover w-full min-h-[100px] ${className}`}
     >
       <div className="flex items-center gap-4">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${ingredient.expiryRisk === 'fresh' ? 'bg-emerald-50 text-emerald-600' :
@@ -78,7 +98,7 @@ const IngredientItem = ({ ingredient, onDelete, onUse, onSelect, selected, class
           <h4 className="font-medium text-stone-800">{ingredient.name}</h4>
           <div className="flex items-center gap-2 mt-1">
             <StatusBadge risk={ingredient.expiryRisk} />
-            <span className="text-xs text-stone-400 font-medium">{ingredient.quantity}</span>
+            <span className="text-xs text-stone-400 font-medium">{ingredient.quantity} {ingredient.unit}</span>
           </div>
         </div>
       </div>
@@ -182,6 +202,91 @@ const RecipeCard = ({
   </motion.div>
 );
 
+// --- Weekly Impact Card ---
+const WeeklyImpact = ({ ingredients }: { ingredients: Ingredient[] }) => {
+
+  const now = new Date();
+
+  const startOfWeek = new Date();
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  const totalSavedUnits = ingredients.reduce((sum, i) => {
+    if (!i.usageHistory) return sum;
+
+    const weeklyUsed = i.usageHistory.reduce((sub, u) => {
+      const usedDate = new Date(u.usedDate);
+      if (usedDate >= startOfWeek) {
+        return sub + u.usedAmount;
+      }
+      return sub;
+    }, 0);
+
+    return sum + weeklyUsed;
+  }, 0);
+  // Top 2–3 ingredients most used
+  const topSavedIngredients = ingredients
+    .map(i => {
+      if (!i.usageHistory) return { name: i.name, weeklyUsed: 0 };
+
+      const weeklyUsed = i.usageHistory.reduce((sum, u) => {
+        const usedDate = new Date(u.usedDate);
+        if (usedDate >= startOfWeek) {
+          return sum + u.usedAmount;
+        }
+        return sum;
+      }, 0);
+
+      return { name: i.name, weeklyUsed };
+    })
+    .filter(i => i.weeklyUsed > 0)
+    .sort((a, b) => b.weeklyUsed - a.weeklyUsed)
+    .slice(0, 3)
+    .map(i => i.name);
+
+  if (totalSavedUnits === 0) {
+    return (
+      <div className="bg-stone-900 text-white p-6 rounded-3xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+            <CheckCircle2 className="text-emerald-400" size={20} />
+          </div>
+          <div>
+            <h3 className="text-lg">Weekly Impact</h3>
+            <p className="text-stone-400 text-xs">No ingredients used yet this week</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-stone-900 text-white p-6 rounded-3xl">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+          <CheckCircle2 className="text-emerald-400" size={20} />
+        </div>
+        <div>
+          <h3 className="text-lg">Weekly Impact</h3>
+          <p className="text-stone-400 text-xs">
+            You've saved {totalSavedUnits} unit{totalSavedUnits !== 1 ? 's' : ''} this week
+          </p>
+        </div>
+      </div>
+      <p className="text-sm text-stone-300 leading-relaxed">
+        By prioritizing your{' '}
+        {topSavedIngredients.map((name, index) => (
+          <React.Fragment key={name}>
+            <strong>{name}</strong>
+            {index === topSavedIngredients.length - 2 ? ' and ' : index < topSavedIngredients.length - 1 ? ', ' : ''}
+          </React.Fragment>
+        ))}
+        , you prevented food waste. Keep it up!
+      </p>
+    </div>
+  );
+};
+
 const CameraModal = ({ isOpen, onClose, onCapture }: { isOpen: boolean; onClose: () => void; onCapture: (img: string) => void }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -239,6 +344,40 @@ const CameraModal = ({ isOpen, onClose, onCapture }: { isOpen: boolean; onClose:
   );
 };
 
+// --- Firestore helper functions ---
+const saveIngredientsToFirestore = async (userId: string, ingredients: Ingredient[]) => {
+  const batch = writeBatch(db);
+  ingredients.forEach(ingredient => {
+    const ref = doc(db, "users", userId, "ingredients", ingredient.id);
+    batch.set(ref, ingredient);
+  });
+  await batch.commit();
+};
+
+const deleteIngredientFromFirestore = async (userId: string, ingredientId: string) => {
+  const ref = doc(db, "users", userId, "ingredients", ingredientId);
+  await deleteDoc(ref);
+};
+
+const saveShoppingListToFirestore = async (userId: string, items: ShoppingListItem[]) => {
+  const batch = writeBatch(db);
+  items.forEach(item => {
+    const ref = doc(db, "users", userId, "shoppingList", item.id);
+    batch.set(ref, item);
+  });
+  await batch.commit();
+};
+
+const deleteShoppingItemFromFirestore = async (userId: string, itemId: string) => {
+  const ref = doc(db, "users", userId, "shoppingList", itemId);
+  await deleteDoc(ref);
+};
+
+const savePreferencesToFirestore = async (userId: string, preferences: UserPreferences) => {
+  const ref = doc(db, "users", userId, "preferences", "userPreferences");
+  await setDoc(ref, preferences);
+};
+
 // --- Main App ---
 
 const getInitialExpiryDate = () => {
@@ -256,27 +395,55 @@ const calculateDaysLeft = (dateString: string) => {
 };
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'fresh' | 'soon' | 'expired'>('all');
   const [scannedIngredient, setScannedIngredient] = useState<Partial<Ingredient>[] | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'inventory' | 'recipes' | 'dashboard' | 'settings'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'recipes' | 'dashboard' | 'shopping' | 'settings'>('inventory');
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
+  const [newShoppingItem, setNewShoppingItem] = useState({ name: '', quantity: 1, unit: '' });
   const [isScanning, setIsScanning] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
-  // Helper to get selected ingredient objects
   const selectedIngredientObjects = ingredients.filter(i => selectedIngredients.has(i.id));
   const [preferences, setPreferences] = useState<UserPreferences>({
     dietaryRestrictions: [],
     fitnessGoal: 'balanced',
     tastes: []
   });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  // Flags to prevent saving during initial load or remote updates
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const isRemoteUpdate = useRef(false);
+
+  const openEditProfile = () => {
+    setEditName(user?.displayName || '');
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setUploading(true);
+    try {
+      await updateProfile(user, { displayName: editName });
+      setIsEditingProfile(false);
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
-  const [manualItem, setManualItem] = useState({ name: '', quantity: 1, expiryDate: getInitialExpiryDate(), unit: 'pcs' });
+  const [manualItem, setManualItem] = useState({ name: '', quantity: 1, expiryDate: getInitialExpiryDate(), unit: 'pcs', nutritionalInfo: 'Veggies' as 'Veggies' | 'Protein' | 'Carbs' });
 
   const handleManualAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -285,43 +452,45 @@ export default function App() {
       name: manualItem.name,
       quantity: manualItem.quantity,
       estimatedDaysLeft: calculateDaysLeft(manualItem.expiryDate),
-      unit: manualItem.unit
+      unit: manualItem.unit,
+      nutritionalInfo: manualItem.nutritionalInfo
     }]);
-    setManualItem({ name: '', quantity: 1, expiryDate: getInitialExpiryDate(), unit: 'pcs' });
+    setManualItem({ name: '', quantity: 1, expiryDate: getInitialExpiryDate(), unit: 'pcs', nutritionalInfo: 'Veggies' });
     setIsManualAddOpen(false);
   };
-
-  // Load data
-  useEffect(() => {
-    const saved = localStorage.getItem('freshfocus_ingredients');
-    if (saved) setIngredients(JSON.parse(saved));
-  }, []);
-
-  // Save data
-  useEffect(() => {
-    localStorage.setItem('freshfocus_ingredients', JSON.stringify(ingredients));
-  }, [ingredients]);
 
   const addIngredient = (newItems: Partial<Ingredient>[]) => {
     const processed = newItems.map(item => {
       const qty = typeof item.quantity === 'number' ? item.quantity : 1;
+      const nutri: 'Veggies' | 'Protein' | 'Carbs' =
+        item.nutritionalInfo === 'Protein' ? 'Protein' :
+          item.nutritionalInfo === 'Carbs' ? 'Carbs' : 'Veggies';
       return {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).substring(2, 9),
         name: item.name || 'Unknown',
         category: 'General',
         addedDate: new Date().toISOString(),
         quantity: qty,
         originalQuantity: qty,
+        usedDate: '',
         unit: item.unit || 'pcs',
         estimatedDaysLeft: item.estimatedDaysLeft ?? 7,
-        expiryRisk: (item.estimatedDaysLeft ?? 7) <= 0 ? 'expired' : (item.estimatedDaysLeft ?? 7) <= 7 ? 'soon' : 'fresh' as ExpiryRisk
+        expiryRisk: (item.estimatedDaysLeft ?? 7) <= 0 ? 'expired' : (item.estimatedDaysLeft ?? 7) <= 7 ? 'soon' : 'fresh' as ExpiryRisk,
+        nutritionalInfo: nutri
       };
     });
     setIngredients(prev => [...processed, ...prev]);
   };
 
-  const deleteIngredient = (id: string) => {
+  const deleteIngredient = async (id: string) => {
     setIngredients(prev => prev.filter(i => i.id !== id));
+    if (user) {
+      try {
+        await deleteIngredientFromFirestore(user.uid, id);
+      } catch (error) {
+        console.error("Failed to delete ingredient from Firestore:", error);
+      }
+    }
   };
 
   const handleFridgeScan = async (base64: string) => {
@@ -351,9 +520,23 @@ export default function App() {
     }
   };
 
-  // Handler for using an ingredient
   const handleUseIngredient = (id: string, amount: number) => {
-    setIngredients(prev => prev.map(i => i.id === id ? { ...i, quantity: Math.max(0, i.quantity - amount) } : i));
+    setIngredients(prev =>
+      prev.map(i => {
+        if (i.id !== id) return i;
+        return {
+          ...i,
+          quantity: Math.max(0, i.quantity - amount),
+          usageHistory: [
+            ...(i.usageHistory ?? []),
+            {
+              usedAmount: amount,
+              usedDate: new Date().toISOString(),
+            },
+          ],
+        };
+      })
+    );
   };
 
   const handleSelectIngredient = (id: string, checked: boolean) => {
@@ -365,7 +548,6 @@ export default function App() {
     });
   };
 
-  // New: Generate recipes from selected ingredients
   const handleGenerateRecipesFromSelection = async () => {
     if (selectedIngredientObjects.length === 0) return;
     setIsGenerating(true);
@@ -394,13 +576,201 @@ export default function App() {
     { name: 'Wasted', value: ingredients.filter(i => i.expiryRisk === 'expired').length, color: '#ef4444' },
   ];
 
-  const healthSummary = [
-    { name: 'Veggies', score: 75 },
-    { name: 'Protein', score: 60 },
-    { name: 'Carbs', score: 45 },
-  ];
+  const healthSummary = React.useMemo(() => {
+    const counts: Record<'Veggies' | 'Protein' | 'Carbs', number> = {
+      Veggies: 0,
+      Protein: 0,
+      Carbs: 0,
+    };
 
-  const decreaseQuantity = (id: string) => { setIngredients(prev => prev.map(item => item.id === id ? { ...item, quantity: Math.max(0, item.quantity - 1) } : item)) };
+    ingredients.forEach(item => {
+      if (item.quantity > 0) {
+        const key = item.nutritionalInfo as 'Veggies' | 'Protein' | 'Carbs' | undefined;
+        if (key && key in counts) {
+          counts[key] += 1;
+        }
+      }
+    });
+
+    const sum = counts.Veggies + counts.Protein + counts.Carbs;
+    if (!sum) {
+      return [
+        { name: 'Veggies', score: 0 },
+        { name: 'Protein', score: 0 },
+        { name: 'Carbs', score: 0 },
+      ];
+    }
+
+    return [
+      { name: 'Veggies', score: Math.round((counts.Veggies / sum) * 100) },
+      { name: 'Protein', score: Math.round((counts.Protein / sum) * 100) },
+      { name: 'Carbs', score: Math.round((counts.Carbs / sum) * 100) },
+    ];
+  }, [ingredients]);
+
+  const handleAddShoppingItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newShoppingItem.name.trim()) return;
+    const newItem: ShoppingListItem = {
+      id: Math.random().toString(36).substring(2, 9),
+      name: newShoppingItem.name,
+      quantity: newShoppingItem.quantity,
+      originalQuantity: newShoppingItem.quantity,
+      unit: newShoppingItem.unit,
+      category: 'General',
+      addedDate: new Date().toISOString(),
+      estimatedDaysLeft: 0,
+      expiryRisk: 'fresh',
+      nutritionalInfo: 'Veggies',
+      purchased: false,
+    };
+    setShoppingList(prev => [...prev, newItem]);
+    setNewShoppingItem({ name: '', quantity: 1, unit: '' });
+  };
+
+  const handleDeleteShoppingItem = async (id: string) => {
+    setShoppingList(prev => prev.filter(item => item.id !== id));
+    if (user) {
+      try {
+        await deleteShoppingItemFromFirestore(user.uid, id);
+      } catch (error) {
+        console.error("Failed to delete shopping item from Firestore:", error);
+      }
+    }
+  };
+
+  const togglePurchased = (id: string) => {
+    setShoppingList(prev =>
+      prev.map(item =>
+        item.id === id ? { ...item, purchased: !item.purchased } : item
+      )
+    );
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  // Listen to auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoadingAuth(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Set up real-time listeners when user is logged in
+  useEffect(() => {
+    if (!user) {
+      setIngredients([]);
+      setShoppingList([]);
+      setPreferences({ dietaryRestrictions: [], fitnessGoal: 'balanced', tastes: [] });
+      setInitialLoadComplete(false);
+      return;
+    }
+
+    let initialLoadCompleted = false;
+
+    // Ingredients listener
+    const unsubscribeIngredients = onSnapshot(
+      collection(db, "users", user.uid, "ingredients"),
+      (snapshot) => {
+        const loadedIngredients = snapshot.docs.map(doc => doc.data() as Ingredient);
+
+        if (!initialLoadCompleted) {
+          setIngredients(loadedIngredients);
+        } else {
+          isRemoteUpdate.current = true;
+          setIngredients(loadedIngredients);
+        }
+      },
+      (error) => {
+        console.error("Ingredients snapshot error:", error);
+      }
+    );
+
+    // Shopping list listener
+    const unsubscribeShopping = onSnapshot(
+      collection(db, "users", user.uid, "shoppingList"),
+      (snapshot) => {
+        const loadedShopping = snapshot.docs.map(doc => doc.data() as ShoppingListItem);
+        if (!initialLoadCompleted) {
+          setShoppingList(loadedShopping);
+        } else {
+          isRemoteUpdate.current = true;
+          setShoppingList(loadedShopping);
+        }
+      },
+      (error) => {
+        console.error("Shopping list snapshot error:", error);
+      }
+    );
+
+    // Preferences listener
+    const unsubscribePreferences = onSnapshot(
+      doc(db, "users", user.uid, "preferences", "userPreferences"),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const loadedPrefs = docSnap.data() as UserPreferences;
+          if (!initialLoadCompleted) {
+            setPreferences(loadedPrefs);
+          } else {
+            isRemoteUpdate.current = true;
+            setPreferences(loadedPrefs);
+          }
+        }
+      },
+      (error) => {
+        console.error("Preferences snapshot error:", error);
+      }
+    );
+
+    initialLoadCompleted = true;
+    setInitialLoadComplete(true);
+
+    return () => {
+      unsubscribeIngredients();
+      unsubscribeShopping();
+      unsubscribePreferences();
+    };
+  }, [user]);
+
+  // Save ingredients to Firestore (only if not a remote update)
+  useEffect(() => {
+    if (!user || !initialLoadComplete || isRemoteUpdate.current) {
+      if (isRemoteUpdate.current) {
+        isRemoteUpdate.current = false;
+      }
+      return;
+    }
+    saveIngredientsToFirestore(user.uid, ingredients).catch(console.error);
+  }, [ingredients, user, initialLoadComplete]);
+
+  // Save shopping list to Firestore
+  useEffect(() => {
+    if (!user || !initialLoadComplete || isRemoteUpdate.current) {
+      if (isRemoteUpdate.current) isRemoteUpdate.current = false;
+      return;
+    }
+    saveShoppingListToFirestore(user.uid, shoppingList).catch(console.error);
+  }, [shoppingList, user, initialLoadComplete]);
+
+  // Save preferences to Firestore
+  useEffect(() => {
+    if (!user || !initialLoadComplete || isRemoteUpdate.current) {
+      if (isRemoteUpdate.current) isRemoteUpdate.current = false;
+      return;
+    }
+    savePreferencesToFirestore(user.uid, preferences).catch(console.error);
+  }, [preferences, user, initialLoadComplete]);
+
+  if (loadingAuth) { return <div className="flex justify-center items-center min-h-screen">Loading...</div>; }
+  if (!user) { return <AuthForm onRegisterSuccess={setUser} />; }
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-8 mx-auto max-w-full sm:max-w-3xl lg:max-w-5xl">
@@ -476,6 +846,15 @@ export default function App() {
                       onChange={e => setManualItem({ ...manualItem, unit: e.target.value })}
                       className="px-3 py-2 bg-stone-50 border border-stone-100 rounded-xl text-sm"
                     />
+                    <select
+                      value={manualItem.nutritionalInfo || 'Veggies'}
+                      onChange={e => setManualItem({ ...manualItem, nutritionalInfo: e.target.value as any })}
+                      className="px-3 py-2 border rounded-xl text-sm bg-stone-50"
+                    >
+                      <option value="Veggies">Veggies</option>
+                      <option value="Protein">Protein</option>
+                      <option value="Carbs">Carbs</option>
+                    </select>
                   </div>
                   <div className="flex flex-col gap-3">
                     <div className="flex-1 flex flex-col items-start gap-1">
@@ -596,7 +975,7 @@ export default function App() {
 
               {recipes.length === 0 ? (
                 <div className="p-12 text-center">
-                  <p className="text-stone-400">No recipes yet. Tap the magic button to generate some!</p>
+                  <p className="text-stone-400">No recipes yet. Tap the magic button to generate!</p>
                 </div>
               ) : (
                 <div className="grid gap-6">
@@ -619,7 +998,7 @@ export default function App() {
               exit={{ opacity: 0, x: 20 }}
               className="space-y-6"
             >
-              <h2 className="text-xl">Waste & Health Insights</h2>
+              <h2 className="text-xl">Waste & Nutrition Insights</h2>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-6 rounded-3xl border border-stone-200">
@@ -643,9 +1022,12 @@ export default function App() {
                     </ResponsiveContainer>
                   </div>
                 </div>
+                <div className="bg-white p-4 rounded-3xl border border-stone-200">
+                  <div className="flex items-center justify-between mb-2 gap-2">
+                    <p className="text-[10px] font-bold text-stone-400 uppercase">Nutrition Balance</p>
+                    <span className="text-[10px] text-stone-400 italic">from your fridge 🥦🥩🍞</span>
+                  </div>
 
-                <div className="bg-white p-6 rounded-3xl border border-stone-200">
-                  <p className="text-[10px] font-bold text-stone-400 uppercase mb-4">Health Balance</p>
                   <div className="space-y-4">
                     {healthSummary.map(stat => (
                       <div key={stat.name}>
@@ -662,20 +1044,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-stone-900 text-white p-6 rounded-3xl">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                    <CheckCircle2 className="text-emerald-400" size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg">Weekly Impact</h3>
-                    <p className="text-stone-400 text-xs">You've saved $12.50 this week</p>
-                  </div>
-                </div>
-                <p className="text-sm text-stone-300 leading-relaxed">
-                  By prioritizing your <strong>spinach</strong> and <strong>yogurt</strong>, you prevented 1.2kg of food waste. Keep it up!
-                </p>
-              </div>
+              <WeeklyImpact ingredients={ingredients} />
             </motion.div>
           )}
 
@@ -687,7 +1056,34 @@ export default function App() {
               exit={{ opacity: 0, x: 20 }}
               className="space-y-6"
             >
-              <h2 className="text-xl">Preferences</h2>
+              <h2 className="text-xl">Settings</h2>
+
+              <div className="bg-white rounded-3xl border border-stone-200 p-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-stone-200 flex items-center justify-center overflow-hidden">
+                    {user?.photoURL ? (
+                      <img src={user.photoURL} alt="avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-2xl font-bold text-stone-500">
+                        {user?.displayName?.[0] || user?.email?.[0] || 'U'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold">{user?.displayName || 'User'}</h3>
+                    <p className="text-sm text-stone-500">{user?.email}</p>
+                  </div>
+                  <button onClick={openEditProfile} className="p-2 text-stone-400 hover:text-stone-600">
+                    <Pencil size={18} />
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="px-4 py-2 text-sm font-medium text-rose-600 border border-rose-200 rounded-xl hover:bg-rose-50 transition-colors"
+                  >
+                    Log out
+                  </button>
+                </div>
+              </div>
 
               <div className="bg-white rounded-3xl border border-stone-200 divide-y divide-stone-100">
                 <div className="p-6">
@@ -736,16 +1132,103 @@ export default function App() {
               </div>
             </motion.div>
           )}
+
+          {activeTab === 'shopping' && (
+            <motion.div
+              key="shopping"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="space-y-4"
+            >
+              <h2 className="text-xl font-bold mb-4">Shopping List</h2>
+
+              <form onSubmit={handleAddShoppingItem} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Item name"
+                  value={newShoppingItem.name}
+                  onChange={e => setNewShoppingItem({ ...newShoppingItem, name: e.target.value })}
+                  className="flex-1 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  value={newShoppingItem.quantity}
+                  onChange={e => setNewShoppingItem({ ...newShoppingItem, quantity: Number(e.target.value) })}
+                  className="w-20 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="unit"
+                  value={newShoppingItem.unit}
+                  onChange={e => setNewShoppingItem({ ...newShoppingItem, unit: e.target.value })}
+                  className="w-20 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-bold"
+                >
+                  Add
+                </button>
+              </form>
+
+              {shoppingList.length === 0 ? (
+                <p className="text-stone-400">Your shopping list is empty</p>
+              ) : (
+                <div className="space-y-2">
+                  {shoppingList.map(item => (
+                    <div
+                      key={item.id}
+                      className={`flex justify-between items-center bg-white p-3 rounded-xl border transition-colors ${item.purchased ? 'bg-emerald-50 border-emerald-200' : ''
+                        }`}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <button
+                          onClick={() => togglePurchased(item.id)}
+                          className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${item.purchased
+                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                            : 'border-stone-300 hover:border-emerald-500'
+                            }`}
+                        >
+                          {item.purchased && <Check size={14} />}
+                        </button>
+                        <span
+                          className={`flex-1 truncate ${item.purchased ? 'line-through text-stone-400' : 'text-stone-700'
+                            }`}
+                        >
+                          {item.name} - {item.quantity} {item.unit}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteShoppingItem(item.id)}
+                        className="text-rose-500 font-bold p-1 hover:text-rose-700 ml-2"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+          {!['inventory', 'recipes', 'dashboard', 'shopping', 'settings'].includes(activeTab) && (
+            <div className="p-12 text-center text-stone-400">
+              Invalid tab
+            </div>
+          )}
+
         </AnimatePresence>
       </main>
 
-      {/* Navigation */}
+      {/* Navigation (保持不变) */}
       <nav className="fixed bottom-6 left-4 right-4 bg-white/80 backdrop-blur-xl border border-stone-200 rounded-[32px] p-2 flex justify-between items-center shadow-2xl shadow-stone-200/50 z-40">
         {[
           { id: 'inventory', icon: Refrigerator, label: 'Fridge' },
           { id: 'recipes', icon: UtensilsCrossed, label: 'Meals' },
           { id: 'dashboard', icon: LayoutDashboard, label: 'Stats' },
-          { id: 'settings', icon: SettingsIcon, label: 'Profile' },
+          { id: 'shopping', icon: Plus, label: 'Shopping List' },
+          { id: 'settings', icon: SettingsIcon, label: 'Settings' }
         ].map(tab => (
           <button
             key={tab.id}
@@ -764,7 +1247,7 @@ export default function App() {
         onClose={() => setIsCameraOpen(false)}
         onCapture={handleFridgeScan}
       />
-      {isEditOpen && scannedIngredient && (
+      {isEditOpen && scannedIngredient?.length ? (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 max-h-[80vh] overflow-y-auto">
 
@@ -813,7 +1296,7 @@ export default function App() {
                   className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm"
                 />
 
-                {/* Calendar to choose expiry */}
+                {/* Expiry date */}
                 <input
                   type="date"
                   value={(() => {
@@ -835,11 +1318,26 @@ export default function App() {
                     setScannedIngredient(updated);
                   }}
                   className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm"
-                />
 
+                />
                 <p className="text-xs text-stone-400">
                   {item.estimatedDaysLeft} days left — Status: {item.estimatedDaysLeft <= 0 ? 'Expired' : item.estimatedDaysLeft <= 7 ? 'Use Soon' : 'Fresh'}
                 </p>
+
+                {/* Nutrition */}
+                <select
+                  value={item.nutritionalInfo || 'Veggies'}
+                  onChange={(e) => {
+                    const updated = [...scannedIngredient];
+                    updated[index] = { ...updated[index], nutritionalInfo: e.target.value as 'Veggies' | 'Protein' | 'Carbs' };
+                    setScannedIngredient(updated);
+                  }}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm"
+                >
+                  <option value="Veggies">Veggies</option>
+                  <option value="Protein">Protein</option>
+                  <option value="Carbs">Carbs</option>
+                </select>
               </div>
             ))}
 
@@ -867,7 +1365,7 @@ export default function App() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
       {selectedRecipe && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 overflow-y-auto max-h-[80vh]">
@@ -907,6 +1405,40 @@ export default function App() {
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {isEditingProfile && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold mb-4">Edit Profile</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-stone-400 uppercase">Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setIsEditingProfile(false)}
+                className="flex-1 py-2 border border-stone-200 rounded-xl text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                disabled={uploading}
+                className="flex-1 py-2 bg-stone-900 text-white rounded-xl text-sm disabled:opacity-50"
+              >
+                {uploading ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
       )}
