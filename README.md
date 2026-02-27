@@ -250,6 +250,26 @@ VITE_FIREBASE_APP_ID=your_app_id
 > **Gemini API key** — get one at [ai.google.dev](https://ai.google.dev/)  
 > **Firebase credentials** — found in your Firebase project settings under *General → Your apps → SDK setup*
 
+Update firebase.ts to use these environment variables:
+
+```env
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+
+const firebaseConfig = {
+    apiKey: "YOUR_FIREBASE_API_KEY_HERE",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export default app;
+```
+
 ### Run Locally
 
 ```bash
