@@ -2,12 +2,12 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBma1uWNwnZPCuG0Z2DrnUBgi3X5ofCNAo",
-    authDomain: "freshfocus-131bc.firebaseapp.com",
-    projectId: "freshfocus-131bc",
-    storageBucket: "freshfocus-131bc.appspot.com",
-    messagingSenderId: "803758226501",
-    appId: "1:803758226501:web:e26d722364b97044c9b72c"
+    apiKey: "YOUR_FIREBASE_API_KEY_HERE",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
 };
 
 const app = initializeApp(firebaseConfig);
