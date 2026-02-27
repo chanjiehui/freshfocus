@@ -244,8 +244,8 @@ freshfocus/
 ### Installation
 
 ```bash
-git clone https://github.com/your-username/freshfocus.git
-cd freshfocus
+git clone https://github.com/chanjiehui/kitahack.git
+cd kitahack/freshfocus
 npm install
 ```
 
