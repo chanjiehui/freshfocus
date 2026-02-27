@@ -161,6 +161,34 @@ FreshFocus innovates at the **intersection of computer vision, generative AI, an
 
 ---
 
+## 🧪 User Feedback & Testing
+
+### User Testing Steps
+To validate FreshFocus with real users outside our team, we conducted a small user testing session with 5 participants over one week. The steps were:
+
+1. **Recruitment:** Selected users from diverse households to try FreshFocus for managing their fridge inventory.
+2. **Scenario Testing:** Users took photos of their fridge, checked the generated ingredient list, monitored expiry alerts, and tried AI-generated recipes.
+3. **Feedback Collection:** Gathered feedback through short surveys and follow-up interviews focusing on usability, AI suggestions, and interface design.
+
+### Key Feedback Points
+- **Feedback 1:** Users wanted the ingredient list sorted by “soon-to-expire” instead of alphabetical order.
+- **Feedback 2:** Some users felt the AI-generated recipes did not sufficiently account for their dietary preferences or taste restrictions.
+- **Feedback 3:** On mobile browsers, the default camera sometimes opened the front camera, making fridge scanning inconvenient.
+
+### Improvements Based on Feedback
+- **Improvement 1:** Added “Sort by Expiry” option to prioritize near-expiry ingredients at the top of the list.
+- **Improvement 2:** Incorporated dietary restrictions and taste preferences into Gemini prompts to generate more personalized recipes.
+- **Improvement 3:** Updated camera API usage to explicitly request the rear-facing camera for better user experience on mobile devices.
+
+### Technical Challenge
+**Challenge:** Firestore `onSnapshot` listeners combined with React `useEffect` hooks caused a write-back loop, leading to infinite updates.
+
+**Solution:** Introduced an `isRemoteUpdate` ref to track whether a state change originated from Firestore. Save effects now skip writing back if the update is remote, preventing loops.
+
+**Decision Impact:** This ensured real-time multi-device sync without conflicts or performance issues, keeping the inventory and shopping list consistent across all user devices.
+
+---
+
 ### Challenges Faced
 
 #### 1. Real-time Sync Write-back Loop
