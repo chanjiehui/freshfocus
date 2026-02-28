@@ -226,7 +226,7 @@ freshfocus/
 
 ```bash
 git clone https://github.com/chanjiehui/freshfocus.git
-cd kitahack
+cd freshfocus
 
 # macOS
 brew install node       # Node.js includes npm
