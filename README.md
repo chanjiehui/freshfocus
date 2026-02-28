@@ -348,6 +348,7 @@ The AI fridge scanner requires a **real camera**, so you'll want to test on an a
 5. ngrok will output a public HTTPS URL like:
    ```
    Forwarding   https://abc123.ngrok-free.app -> http://localhost:3000
+   # Need connect to the same Wi-Fi
    ```
 
 6. Open that URL on your phone — the camera and all Firebase features will work over HTTPS.
