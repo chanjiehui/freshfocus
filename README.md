@@ -226,7 +226,19 @@ freshfocus/
 
 ```bash
 git clone https://github.com/chanjiehui/kitahack.git
-cd kitahack/freshfocus
+cd kitahack
+
+# macOS
+brew install node       # Node.js includes npm
+node -v                # Verify Node.js version
+npm -v                 # Verify npm version
+
+# Windows
+# Download LTS version from https://nodejs.org/en/download/
+# Make sure to check "Add to PATH" during installation
+node -v                # Verify Node.js version
+npm -v                 # Verify npm version
+
 npm install
 ```
 
