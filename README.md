@@ -290,18 +290,22 @@ The AI fridge scanner requires a **real camera**, so you'll want to test on an a
    ```bash
    npm run dev
    ```
-
-3. In a separate terminal, run ngrok:
+3. In a separate terminal, add ngrok authtoken:
+   ```bash
+   ngrok config add-authtoken <your-ngrok-token>
+   ```
+   
+4. Run ngrok:
    ```bash
    ngrok http 3000
    ```
 
-4. ngrok will output a public HTTPS URL like:
+5. ngrok will output a public HTTPS URL like:
    ```
    Forwarding   https://abc123.ngrok-free.app -> http://localhost:3000
    ```
 
-5. Open that URL on your phone — the camera and all Firebase features will work over HTTPS.
+6. Open that URL on your phone — the camera and all Firebase features will work over HTTPS.
 
 > **Note:** The free ngrok tier is sufficient. You do not need an account for basic tunnelling.
 
