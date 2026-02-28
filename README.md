@@ -232,13 +232,13 @@ cd freshfocus
 brew install node       # Node.js includes npm
 node -v                # Verify Node.js version
 npm -v                 # Verify npm version
+npm install
 
 # Windows
 # Download LTS version from https://nodejs.org/en/download/
 # Make sure to check "Add to PATH" during installation
 node -v                # Verify Node.js version
 npm -v                 # Verify npm version
-
 npm install
 ```
 
