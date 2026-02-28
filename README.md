@@ -225,7 +225,7 @@ freshfocus/
 ### Installation
 
 ```bash
-git clone https://github.com/chanjiehui/kitahack.git
+git clone https://github.com/chanjiehui/freshfocus.git
 cd kitahack
 
 # macOS
